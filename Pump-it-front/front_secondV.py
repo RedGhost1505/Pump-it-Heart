@@ -470,6 +470,18 @@ class camThread(QThread):
                 l_foot_index_x = int(lm.landmark[lmPose.LEFT_FOOT_INDEX].x * w)
                 l_foot_index_y = int(lm.landmark[lmPose.LEFT_FOOT_INDEX].y * h)
 
+                heel_height = abs(l_heel_y - l_foot_index_y)
+                # Threshold for heel lift detection.
+                threshold = 10  # Adjust this value as needed.
+
+                # Check for heel lift and display alert.
+                if heel_height > threshold:
+                    cv2.putText(image, 'Talon: False', (l_heel_x + 10, l_heel_y), font, 0.9, red, 2)
+                    cv2.line(image, (l_ankle_x, l_ankle_y), (l_heel_x, l_heel_y), red, 4)
+                else:
+                    cv2.putText(image, 'Talon: True', (l_heel_x + 10, l_heel_y), font, 0.9, green, 2)
+                    cv2.line(image, (l_ankle_x, l_ankle_y), (l_heel_x, l_heel_y), green, 4)
+
                 # Calculate distance between left shoulder and right shoulder points.
                 offset = findDistance(l_shldr_x, l_shldr_y, r_shldr_x, r_shldr_y)
 
