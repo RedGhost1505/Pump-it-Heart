@@ -209,31 +209,31 @@ class camThread(QThread):
                     angle1, angle1_adjusted = calcular_angulo_entre_vectores(vector1, vector2)
                     angle2, angle2_adjusted = calcular_angulo_entre_vectores(vector3, vector4)
 
-                    # Los ángulos 'angle1_adjusted' y 'angle2_adjusted' ya están ajustados a 180 grados si es necesario
-                    # Puedes utilizar 'angle1' y 'angle2' directamente si prefieres los ángulos originales sin ajustar
+                    # # Los ángulos 'angle1_adjusted' y 'angle2_adjusted' ya están ajustados a 180 grados si es necesario
+                    # # Puedes utilizar 'angle1' y 'angle2' directamente si prefieres los ángulos originales sin ajustar
 
-                    # Contador de repetición
-                    Indicator = ""
-                    FLAG = False
+                    # # Contador de repetición
+                    # Indicator = ""
+                    # FLAG = False
 
-                    # Utiliza estos ángulos para cualquier procesamiento posterior, como evaluación de condiciones
-                    if 160 <= angle1_adjusted and angle2_adjusted <= 180:
-                        Indicator = "Up"
-                        FLAG = True
-                    elif 30 <= angle1_adjusted and angle2_adjusted <= 90:
-                        Indicator = "Down"
-                        FLAG = False
+                    # # Utiliza estos ángulos para cualquier procesamiento posterior, como evaluación de condiciones
+                    # if 160 <= angle1_adjusted and angle2_adjusted <= 180:
+                    #     Indicator = "Up"
+                    #     FLAG = True
+                    # elif 30 <= angle1_adjusted and angle2_adjusted <= 90:
+                    #     Indicator = "Down"
+                    #     FLAG = False
                     
-                    # Comprobar si esta es la primera iteración
-                    if estado_anterior_flag is None:
-                        estado_anterior_flag = FLAG
-                    else:
-                        # Si el estado de la flag ha cambiado, incrementar el contador
-                        if FLAG != estado_anterior_flag:
-                            estado_anterior_flag = FLAG
-                            if estado_anterior_flag == True:
-                                contador_cambios += 1
-                                self.contador_cambios_signal.emit(contador_cambios)
+                    # # Comprobar si esta es la primera iteración
+                    # if estado_anterior_flag is None:
+                    #     estado_anterior_flag = FLAG
+                    # else:
+                    #     # Si el estado de la flag ha cambiado, incrementar el contador
+                    #     if FLAG != estado_anterior_flag:
+                    #         estado_anterior_flag = FLAG
+                    #         if estado_anterior_flag == True:
+                    #             contador_cambios += 1
+                    #             self.contador_cambios_signal.emit(contador_cambios)
 
 
                     # print(angle1_adjusted, angle2_adjusted, Indicator, contador_cambios)
@@ -246,8 +246,8 @@ class camThread(QThread):
                     contours = np.array([[x11, y11], [x22, y22], [x33, y33]])
                     cv2.fillPoly(canva, pts=[contours], color=(242, 233,228 ))
 
-                    cv2.putText(canva, f'Contador de repeticiones: {contador_cambios}', (10, 70), cv2.FONT_HERSHEY_SIMPLEX, 0.5, color_texto, 1)
-                    cv2.putText(esqueleto, f'Contador de repeticiones: {contador_cambios}', (10, 50), cv2.FONT_HERSHEY_SIMPLEX, 1, color_texto, 2)
+                    # cv2.putText(canva, f'Contador de repeticiones: {contador_cambios}', (10, 70), cv2.FONT_HERSHEY_SIMPLEX, 0.5, color_texto, 1)
+                    # cv2.putText(esqueleto, f'Contador de repeticiones: {contador_cambios}', (10, 50), cv2.FONT_HERSHEY_SIMPLEX, 1, color_texto, 2)
                     cv2.putText(esqueleto, f'Linea Manos: {texto_estado}', (10, 70), cv2.FONT_HERSHEY_SIMPLEX, 0.5, color_texto, 1)
 
                     # Áreas de los botones
@@ -322,8 +322,8 @@ class camThread(QThread):
                 #Display
                 # cv2.imshow('Canva', canva)
                 # cv2.imshow(self.previewName, esqueleto)
-                if cv2.waitKey(1) & 0xFF == ord('o'):
-                    contador_cambios = 0
+                # if cv2.waitKey(1) & 0xFF == ord('o'):
+                #     contador_cambios = 0
                 
                 rgb_image = cv2.cvtColor(esqueleto, cv2.COLOR_BGR2RGB)
                 h, w, ch = rgb_image.shape
@@ -333,6 +333,9 @@ class camThread(QThread):
                 self.change_pixmap_signal.emit(convert_to_Qt_format)
 
     def camPreview_Lat(self):
+
+        estado_anterior_flag = None
+        contador_cambios = 0
 
         # Calculate distance
         def findDistance(x1, y1, x2, y2):
@@ -422,7 +425,7 @@ class camThread(QThread):
             # Get height and width.
             h, w = image.shape[:2]
             #Print the height and width of the frame
-            print(f'Height: {h}, Width: {w}')
+            # print(f'Height: {h}, Width: {w}')
 
             # Convert the BGR image to RGB.
             image = cv2.cvtColor(image, cv2.COLOR_BGR2RGB)
@@ -569,6 +572,36 @@ class camThread(QThread):
                 # Write frames.
                 video_output.write(image)
 
+                # Flag
+                Indicator = ""
+                FLAG = False
+                coordenatesFootStart = (0, 0)
+                coordenatesFootEnd = (0, 0)
+
+                if 160 <= leg_Angle <= 180:
+                    Indicator = "Up"
+                    FLAG = True
+                    coordenatesFootEnd = (l_foot_index_x, l_foot_index_y)
+                elif 30 <= leg_Angle <= 90:
+                    Indicator = "Down"
+                    FLAG = False
+                    coordenatesFootStart = (l_foot_index_x, l_foot_index_y)
+                
+                # Check if this is the first iteration
+                if l_foot_index_x and l_foot_index_y:
+                    if estado_anterior_flag is None:
+                        estado_anterior_flag = FLAG
+                    else:
+                        # If the flag state has changed, increment the counter
+                        if FLAG != estado_anterior_flag:
+                            estado_anterior_flag = FLAG
+                            # If the flag is True and the coordinates are not (0, 0) and the coordinates are the same in both cases, then increment the counter
+                            if estado_anterior_flag == True and coordenatesFootStart != (0, 0) and coordenatesFootEnd != (0, 0) and coordenatesFootStart == coordenatesFootEnd:
+                                contador_cambios += 1
+                                print("Entró al contador de cambios")
+                                self.contador_cambios_signal.emit(contador_cambios)
+                                print(contador_cambios)
+
             else:
                 cv2.putText(image, 'No Landmarks Detected', (10, 30), font, 0.9, blue, 2)
 
@@ -612,6 +645,7 @@ class SecondaryWindow(QMainWindow):
 
         self.thread2 = camThread("Lateral", 1, 'lat')
         self.thread2.change_pixmap_signal.connect(self.update_image2)
+        self.thread2.contador_cambios_signal.connect(self.update_counter)
         self.thread2.start()
 
 
@@ -620,7 +654,7 @@ class SecondaryWindow(QMainWindow):
         if image:
             pixmap = QPixmap.fromImage(image)
             if not pixmap.isNull():
-                print("Updating image 1")
+                # print("Updating image 1")
                 self.ui.imageLabel.setPixmap(pixmap)
             else:
                 print("Error: Pixmap is null.")
@@ -631,7 +665,7 @@ class SecondaryWindow(QMainWindow):
         if image:
             pixmap = QPixmap.fromImage(image)
             if not pixmap.isNull():
-                print("Updating image 2")
+                # print("Updating image 2")
                 self.ui.imageLabel_2.setPixmap(pixmap)
             else:
                 print("Error: Pixmap is null.")
