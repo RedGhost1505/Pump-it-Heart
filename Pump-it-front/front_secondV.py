@@ -15,6 +15,7 @@ class camThread(QThread):
     change_pixmap_signal = pyqtSignal(QImage)
     contador_cambios_signal = pyqtSignal(int)
     openMainWindow = pyqtSignal(bool)
+    contador_cambios = 0
 
     def __init__(self, previewName, camID, model_type):
         super().__init__()
@@ -34,8 +35,6 @@ class camThread(QThread):
         mp_drawing = mp.solutions.drawing_utils
         mp_pose = mp.solutions.pose
         pose = mp_pose.Pose()
-        # Contador de las veces que la flag cambia de True a False o viceversa
-        contador_cambios = 0
         # Estado anterior de la flag para comparar con el estado actual en cada iteración
         estado_anterior_flag = None
 
@@ -79,6 +78,7 @@ class camThread(QThread):
             
             if success:
                 height, width, _ = esqueleto.shape 
+                esqueleto = cv2.flip(esqueleto, 1)
                 results = pose.process(esqueleto)
                 if results.pose_landmarks:
                     mp_drawing.draw_landmarks(esqueleto,results.pose_landmarks,mp_pose.POSE_CONNECTIONS, landmark_drawing_spec=mp_drawing.DrawingSpec(color=(255, 255, 255), thickness=2, circle_radius=2), connection_drawing_spec=mp_drawing.DrawingSpec(color=(245,66,230), thickness=2, circle_radius=2))
@@ -129,6 +129,22 @@ class camThread(QThread):
                     x29 = int(results.pose_landmarks.landmark[29].x * width)
                     y29 = int(results.pose_landmarks.landmark[29].y * height)
 
+                    # Left foot index.
+                    l_foot_index_x = int(results.pose_landmarks.landmark[31].x * width)
+                    l_foot_index_y = int(results.pose_landmarks.landmark[31].y * height)
+
+                    # Right foot index.
+                    r_foot_index_x = int(results.pose_landmarks.landmark[32].x * width)
+                    r_foot_index_y = int(results.pose_landmarks.landmark[32].y * height)
+
+                    # Left shoulder.
+                    l_shldr_x = int(results.pose_landmarks.landmark[11].x * width)
+                    l_shldr_y = int(results.pose_landmarks.landmark[11].y * height)
+
+                    # Right shoulder.
+                    r_shldr_x = int(results.pose_landmarks.landmark[12].x * width)
+                    r_shldr_y = int(results.pose_landmarks.landmark[12].y * height)
+                    
 
                     point1 = (x1, y1)#righthip
                     point2 = (x2, y2)#righsknee
@@ -142,6 +158,11 @@ class camThread(QThread):
                     point10 = (x30, y30)#pie derecho
                     point11 = (x31, y31)#pie izquierdo
                     point12 = (x29, y29)#pie izquierdo
+                    point13 = (l_foot_index_x, l_foot_index_y)#left foot index
+                    point14 = (r_foot_index_x, r_foot_index_y)#right foot index
+                    point15 = (l_shldr_x, l_shldr_y)#left shoulder
+                    point16 = (r_shldr_x, r_shldr_y)#right shoulder
+
 
                     canva = np.zeros (esqueleto.shape, np.uint8) #matriz ceros negra fondo
 
@@ -208,35 +229,6 @@ class camThread(QThread):
 
                     angle1, angle1_adjusted = calcular_angulo_entre_vectores(vector1, vector2)
                     angle2, angle2_adjusted = calcular_angulo_entre_vectores(vector3, vector4)
-
-                    # # Los ángulos 'angle1_adjusted' y 'angle2_adjusted' ya están ajustados a 180 grados si es necesario
-                    # # Puedes utilizar 'angle1' y 'angle2' directamente si prefieres los ángulos originales sin ajustar
-
-                    # # Contador de repetición
-                    # Indicator = ""
-                    # FLAG = False
-
-                    # # Utiliza estos ángulos para cualquier procesamiento posterior, como evaluación de condiciones
-                    # if 160 <= angle1_adjusted and angle2_adjusted <= 180:
-                    #     Indicator = "Up"
-                    #     FLAG = True
-                    # elif 30 <= angle1_adjusted and angle2_adjusted <= 90:
-                    #     Indicator = "Down"
-                    #     FLAG = False
-                    
-                    # # Comprobar si esta es la primera iteración
-                    # if estado_anterior_flag is None:
-                    #     estado_anterior_flag = FLAG
-                    # else:
-                    #     # Si el estado de la flag ha cambiado, incrementar el contador
-                    #     if FLAG != estado_anterior_flag:
-                    #         estado_anterior_flag = FLAG
-                    #         if estado_anterior_flag == True:
-                    #             contador_cambios += 1
-                    #             self.contador_cambios_signal.emit(contador_cambios)
-
-
-                    # print(angle1_adjusted, angle2_adjusted, Indicator, contador_cambios)
 
                     cv2.putText(canva, str(int(angle1_adjusted)), (x2 - 50, y2 - 50), cv2.FONT_HERSHEY_PLAIN, 2, (0, 0, 255), 2)
                     contours = np.array([[x1, y1], [x2, y2], [x3, y3]])
@@ -305,8 +297,8 @@ class camThread(QThread):
                         time_inside_button += 1 / fps
                         if time_inside_button >= tiempo_minimo_dentro_botón:
                             print("Reiniciar contador de repeticiones")
-                            contador_cambios = 0
-                            self.contador_cambios_signal.emit(contador_cambios)
+                            self.contador_cambios = 0
+                            self.contador_cambios_signal.emit(self.contador_cambios)
                             if not sound_played:
                                 sound.play()
                                 sound_played = True
@@ -316,14 +308,14 @@ class camThread(QThread):
                         time_inside_button = 0
                         sound_played = False
 
+                    # Validar posición de las piernas para indicar si están bien colocadas o no 
+
+                    if point5 and point2 and point13 and point14 and point15 and point16:
+                        if point15[0]-2 < point5[0] < point15[0] and point16[0] < point2[0] < point16[0]+2:
+                            print('Piernas bien colocadas')
+
                 else:
                     cv2.putText(esqueleto, 'No Landmarks Detected', (10, 30), cv2.FONT_HERSHEY_SIMPLEX, 1, (0, 0, 255), 2)
-                
-                #Display
-                # cv2.imshow('Canva', canva)
-                # cv2.imshow(self.previewName, esqueleto)
-                # if cv2.waitKey(1) & 0xFF == ord('o'):
-                #     contador_cambios = 0
                 
                 rgb_image = cv2.cvtColor(esqueleto, cv2.COLOR_BGR2RGB)
                 h, w, ch = rgb_image.shape
@@ -335,7 +327,14 @@ class camThread(QThread):
     def camPreview_Lat(self):
 
         estado_anterior_flag = None
-        contador_cambios = 0
+        iteration = False
+
+        # Flag
+        Indicator = ""
+        FLAG = False
+        full_cycle_completed = False  # Indicador de ciclo completo
+        coordenatesFootStart = (0, 0)
+        coordenatesFootEnd = (0, 0)
 
         # Calculate distance
         def findDistance(x1, y1, x2, y2):
@@ -417,6 +416,7 @@ class camThread(QThread):
         while self.running and cam.isOpened():
             # Capture frames.
             success, image = cam.read()
+            image = cv2.flip(image, 1)
             if not success:
                 self.running = False
                 break
@@ -584,35 +584,31 @@ class camThread(QThread):
                 # Write frames.
                 video_output.write(image)
 
-                # Flag
-                Indicator = ""
-                FLAG = False
-                coordenatesFootStart = (0, 0)
-                coordenatesFootEnd = (0, 0)
-
                 if 160 <= leg_Angle <= 180:
+                    if Indicator == "Down":  # Cambio de "Down" a "Up"
+                        full_cycle_completed = True
                     Indicator = "Up"
-                    FLAG = True
-                    coordenatesFootEnd = (l_foot_index_x, l_foot_index_y)
-                elif 30 <= leg_Angle <= 90:
-                    Indicator = "Down"
                     FLAG = False
-                    coordenatesFootStart = (l_foot_index_x, l_foot_index_y)
-                
-                # Check if this is the first iteration
+                    print("Up")
+
+                elif 30 <= leg_Angle <= 90:
+                    if Indicator == "Up" and full_cycle_completed:  # Solo contar si antes estaba "Up" y se completó un ciclo
+                        self.contador_cambios += 1
+                        print("Entró al contador de cambios")
+                        self.contador_cambios_signal.emit(self.contador_cambios)
+                        full_cycle_completed = False  # Restablecer el indicador de ciclo completo
+                    Indicator = "Down"
+                    FLAG = True
+                    print("Down")
+
+                # Check if the flag changes from True to False or vice versa
                 if l_foot_index_x and l_foot_index_y:
                     if estado_anterior_flag is None:
                         estado_anterior_flag = FLAG
-                    else:
-                        # If the flag state has changed, increment the counter
-                        if FLAG != estado_anterior_flag:
-                            estado_anterior_flag = FLAG
-                            # If the flag is True and the coordinates are not (0, 0) and the coordinates are the same in both cases, then increment the counter
-                            if estado_anterior_flag == True and coordenatesFootStart != (0, 0) and coordenatesFootEnd != (0, 0) and coordenatesFootStart == coordenatesFootEnd:
-                                contador_cambios += 1
-                                print("Entró al contador de cambios")
-                                self.contador_cambios_signal.emit(contador_cambios)
-                                print(contador_cambios)
+                    elif estado_anterior_flag != FLAG:
+                        estado_anterior_flag = FLAG
+                        
+
 
             else:
                 cv2.putText(image, 'No Landmarks Detected', (10, 30), font, 0.9, blue, 2)
@@ -649,13 +645,13 @@ class SecondaryWindow(QMainWindow):
         self.estado_anterior_flag = None
         
 
-        self.thread1 = camThread("Front", 0, 'front')
+        self.thread1 = camThread("Front", 1, 'front')
         self.thread1.change_pixmap_signal.connect(self.update_image1)
         self.thread1.contador_cambios_signal.connect(self.update_counter)
         self.thread1.openMainWindow.connect(self.openMainWindow)
         self.thread1.start()
 
-        self.thread2 = camThread("Lateral", 1, 'lat')
+        self.thread2 = camThread("Lateral", 0, 'lat')
         self.thread2.change_pixmap_signal.connect(self.update_image2)
         self.thread2.contador_cambios_signal.connect(self.update_counter)
         self.thread2.start()
