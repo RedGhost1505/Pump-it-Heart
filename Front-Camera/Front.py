@@ -16,9 +16,9 @@ contador_cambios = 0
 # Estado anterior de la flag para comparar con el estado actual en cada iteración
 estado_anterior_flag = None
 
-file_name = 'Reference 2.mp4'
-cap = cv2.VideoCapture(file_name)
-# cap = cv2.VideoCapture(0)
+# file_name = 'Reference 2.mp4'
+# cap = cv2.VideoCapture(file_name)
+cap = cv2.VideoCapture(1)
 #captura
 while cap.isOpened():
     success,esqueleto = cap.read()

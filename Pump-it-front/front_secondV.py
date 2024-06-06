@@ -4,19 +4,36 @@ from PyQt6.QtGui import QImage, QPixmap
 from PyQt6.QtWidgets import QMainWindow
 from pantalla_principal import Ui_MainWindow  # Asume que tu archivo se llama Pump_it_Front.py
 from Dos_Pantalla import Ui_SecondaryWindow
+from Instructions import Instructions_UI
+from Resume import Resume_UI
 import mediapipe as mp
 import math
 import numpy as np
 import cv2 
 import sys
 import pygame
+import firebase_admin
+from firebase_admin import credentials, firestore
+from datetime import datetime
+
+contador_cambios_global = 0
+contador_de_errores = 0
+Avg_time = 20
+Tot_time = 20
+MET = 6.0 # MET value for barbell squat
+weight = 70 # weight in kg
+time = 10 # time in minutes
+performance_bar = 15
+performance_correct = 15
+performance_neck = 15
+kcal = 50
+
 
 class camThread(QThread):
+    openResume = pyqtSignal(bool)
     change_pixmap_signal = pyqtSignal(QImage)
     contador_cambios_signal = pyqtSignal(int)
-    openMainWindow = pyqtSignal(bool)
-    contador_cambios = 0
-
+    
     def __init__(self, previewName, camID, model_type):
         super().__init__()
         self.previewName = previewName
@@ -43,7 +60,7 @@ class camThread(QThread):
         tiempo_minimo_dentro_botón = 1  # Tiempo mínimo en segundos que la mano debe estar dentro del botón para activar la acción
         sound_played = False
         pygame.mixer.init()
-        sound = pygame.mixer.Sound('hoja_papel.mp3')
+        sound = pygame.mixer.Sound('multi-pop-5.mp3')
 
         def calcular_angulo_entre_vectores(vector1, vector2):
             dot_product = vector1[0] * vector2[0] + vector1[1] * vector2[1]
@@ -185,9 +202,12 @@ class camThread(QThread):
                     cv2.circle(canva, (point8), 3, (255,0,0), cv2.FILLED)  
                     cv2.line(canva, (point7), (point8), (0, 255, 0), 5)    
 
-                    cv2.circle(esqueleto, (point7), 3, (255,0,0), cv2.FILLED)  
-                    cv2.circle(esqueleto, (point8), 3, (255,0,0), cv2.FILLED)  
-                    cv2.line(esqueleto, (point7), (point8), (0, 255, 0), 5)
+                    if esta_nivelada:
+                        # Dibujar línea entre las manos
+                        cv2.line(esqueleto, (point7), (point8), (0, 255, 0), 5)
+                    else:
+                        # Dibujar línea entre las manos
+                        cv2.line(esqueleto, (point7), (point8), (0, 0, 255), 5)
                     
                     #Pierna derecha
                     cv2.line(canva, (point1), (point2), (0, 255, 0), 20)
@@ -240,7 +260,7 @@ class camThread(QThread):
 
                     # cv2.putText(canva, f'Contador de repeticiones: {contador_cambios}', (10, 70), cv2.FONT_HERSHEY_SIMPLEX, 0.5, color_texto, 1)
                     # cv2.putText(esqueleto, f'Contador de repeticiones: {contador_cambios}', (10, 50), cv2.FONT_HERSHEY_SIMPLEX, 1, color_texto, 2)
-                    cv2.putText(esqueleto, f'Linea Manos: {texto_estado}', (10, 70), cv2.FONT_HERSHEY_SIMPLEX, 0.5, color_texto, 1)
+                    cv2.putText(esqueleto, f'Tu barra se encuentra: {texto_estado}', (10, 95), cv2.FONT_HERSHEY_SIMPLEX, 0.7, color_texto, 2)
 
                     # Áreas de los botones
                     menu_button_area = (20, 20, 120, 60)  # x1, y1, x2, y2 (esquina superior izquierda y esquina inferior derecha)
@@ -282,8 +302,8 @@ class camThread(QThread):
                         cv2.rectangle(esqueleto, menu_button_area[:2], menu_button_area[2:], white_color, 2)
                         time_inside_button += 1 / fps  # fps es la velocidad de cuadros por segundo del video
                         if time_inside_button >= tiempo_minimo_dentro_botón:
-                            print("Volver al menú principal")
-                            self.openMainWindow.emit(True)
+                            # print("Volver al menú principal")
+                            self.openResume.emit(True)
 
                             if not sound_played:
                                 sound.play()
@@ -296,9 +316,10 @@ class camThread(QThread):
                         cv2.rectangle(esqueleto, reset_button_area[:2], reset_button_area[2:], white_color, 2)
                         time_inside_button += 1 / fps
                         if time_inside_button >= tiempo_minimo_dentro_botón:
-                            print("Reiniciar contador de repeticiones")
-                            self.contador_cambios = 0
-                            self.contador_cambios_signal.emit(self.contador_cambios)
+                            # print("Reiniciar contador de repeticiones")
+                            global contador_cambios_global
+                            contador_cambios_global = 0
+                            self.contador_cambios_signal.emit(contador_cambios_global)
                             if not sound_played:
                                 sound.play()
                                 sound_played = True
@@ -311,8 +332,11 @@ class camThread(QThread):
                     # Validar posición de las piernas para indicar si están bien colocadas o no 
 
                     if point5 and point2 and point13 and point14 and point15 and point16:
-                        if point15[0]-2 < point5[0] < point15[0] and point16[0] < point2[0] < point16[0]+2:
+                        if point15[0]+40 < point5[0] < point15[0]+20 and point16[0]-20 < point2[0] < point16[0]-40:
                             print('Piernas bien colocadas')
+                        else:
+                            cv2.rectangle(esqueleto, (point15[0]-4, point5[1]+2), (point15[0]+40, point5[1]-20), (255,0,0),cv2.FILLED)#leftknee
+                            cv2.rectangle(esqueleto, (point16[0]-4, point2[1]+2), (point16[0]-40, point2[1]-20), (255,0,0),cv2.FILLED)#rightknee
 
                 else:
                     cv2.putText(esqueleto, 'No Landmarks Detected', (10, 30), cv2.FONT_HERSHEY_SIMPLEX, 1, (0, 0, 255), 2)
@@ -344,9 +368,25 @@ class camThread(QThread):
 
         # Calculate angle.
         def findAngle(x1, y1, x2, y2):
-            theta = math.acos((y2 - y1) * (-y1) / (math.sqrt(
-                (x2 - x1) ** 2 + (y2 - y1) ** 2) * y1))
-            degree = int(180 / math.pi) * theta
+            # Calcular la diferencia en coordenadas
+            dx = x2 - x1
+            dy = y2 - y1
+            # Calcular la distancia entre los puntos
+            distance = math.sqrt(dx ** 2 + dy ** 2)
+
+            # Verificar si la distancia o y1 es cero
+            if distance == 0 or y1 == 0:
+                return 0  # Ángulo indefinido o cero
+            
+            # Calcular el coseno del ángulo usando la fórmula segura
+            cos_theta = ((dy * -y1) / (distance * y1))
+            # Asegurar que el coseno esté en el rango permitido para acos
+            cos_theta = max(-1, min(1, cos_theta))
+            
+            # Calcular el ángulo en radianes y luego convertir a grados
+            theta = math.acos(cos_theta)
+            degree = theta * (180 / math.pi)
+            
             return degree
         
         def calcular_angulo_entre_vectores(vector1, vector2):
@@ -416,7 +456,6 @@ class camThread(QThread):
         while self.running and cam.isOpened():
             # Capture frames.
             success, image = cam.read()
-            image = cv2.flip(image, 1)
             if not success:
                 self.running = False
                 break
@@ -589,17 +628,18 @@ class camThread(QThread):
                         full_cycle_completed = True
                     Indicator = "Up"
                     FLAG = False
-                    print("Up")
+                    # print("Up")
 
                 elif 30 <= leg_Angle <= 90:
                     if Indicator == "Up" and full_cycle_completed:  # Solo contar si antes estaba "Up" y se completó un ciclo
-                        self.contador_cambios += 1
+                        global contador_cambios_global
+                        contador_cambios_global += 1
                         print("Entró al contador de cambios")
-                        self.contador_cambios_signal.emit(self.contador_cambios)
+                        self.contador_cambios_signal.emit(contador_cambios_global)
                         full_cycle_completed = False  # Restablecer el indicador de ciclo completo
                     Indicator = "Down"
                     FLAG = True
-                    print("Down")
+                    # print("Down")
 
                 # Check if the flag changes from True to False or vice versa
                 if l_foot_index_x and l_foot_index_y:
@@ -645,13 +685,13 @@ class SecondaryWindow(QMainWindow):
         self.estado_anterior_flag = None
         
 
-        self.thread1 = camThread("Front", 1, 'front')
+        self.thread1 = camThread("Front", 0, 'front')
         self.thread1.change_pixmap_signal.connect(self.update_image1)
         self.thread1.contador_cambios_signal.connect(self.update_counter)
-        self.thread1.openMainWindow.connect(self.openMainWindow)
+        self.thread1.openResume.connect(self.openResume)
         self.thread1.start()
 
-        self.thread2 = camThread("Lateral", 0, 'lat')
+        self.thread2 = camThread("Lateral", 1, 'lat')
         self.thread2.change_pixmap_signal.connect(self.update_image2)
         self.thread2.contador_cambios_signal.connect(self.update_counter)
         self.thread2.start()
@@ -696,6 +736,13 @@ class SecondaryWindow(QMainWindow):
 
         self.parent().show()
         self.close()
+
+    def openResume(self):
+        self.thread1.stop()
+        self.thread2.stop()
+        self.resumeWindow = ResumeWindow(self)
+        self.resumeWindow.show()
+        self.close()
                                 
 
 class MainWindow(QMainWindow):
@@ -703,12 +750,86 @@ class MainWindow(QMainWindow):
         super(MainWindow, self).__init__(parent)
         self.ui = Ui_MainWindow()
         self.ui.setupUi(self)
+        global contador_cambios_global
+        contador_cambios_global = 0
+        global contador_de_errores
+        contador_de_errores = 0
+        global Avg_time
+        Avg_time = 15
+        global Tot_time
+        Tot_time = 15
         self.ui.pushButton.clicked.connect(self.openSecondaryScreen)
+        self.ui.pushButton_2.clicked.connect(self.openInstructable)
 
     def openSecondaryScreen(self):
         self.secondaryWindow = SecondaryWindow(self)
         self.secondaryWindow.show()
         self.hide()
+    
+    def openInstructable(self):
+        self.instructableWindow = InstructableWindow(self)
+        self.instructableWindow.show()
+        self.hide()
+
+class InstructableWindow(QMainWindow):
+    def __init__(self, parent=None):
+        super(InstructableWindow, self).__init__(parent)
+        self.ui = Instructions_UI()
+        self.ui.setupUi(self)
+        self.ui.pushButton.clicked.connect(self.openMainWindow)
+
+    def openMainWindow(self):
+        self.parent().show()
+        self.close()
+
+class ResumeWindow(QMainWindow):
+    def __init__(self, parent=None):
+        super(ResumeWindow, self).__init__(parent)
+        self.ui = Resume_UI()
+        self.ui.setupUi(self)
+        self.ui.Home.clicked.connect(self.openMainWindow)
+        global contador_cambios_global
+        self.ui.Reps.setText(str(contador_cambios_global))
+        global contador_de_errores
+        self.ui.Errors.setText(str(contador_de_errores))
+        global Tot_time
+        self.ui.Settime.setText(str(Tot_time))
+        # Configuracion Firebase
+        cred = credentials.Certificate("serviceAccountKey.json")
+        firebase_admin.initialize_app(cred)
+        # Configuración de BD (Firestore)
+        db = firestore.client()
+        self.user_data_ref = db.collection('users').document('bxNlOgPt88gX9e3awXabEj4jzqA2').collection('data')
+
+        global Avg_time
+        global performance_bar
+        global performance_correct
+        global performance_neck
+        global MET
+        global weight
+        global kcal
+
+
+        
+        # Inyección de datos en la BD
+        data = {
+            'type_exercise': 'barbell squat',
+            'avg_time': Avg_time,
+            'errors': contador_de_errores,
+            'performance_bar': performance_bar,
+            'performance_correct': performance_correct,
+            'performance_neck': performance_neck,
+            'reps': contador_cambios_global,
+            'set_time': Tot_time,
+            'timestamp': datetime.now(),
+            'kcal': kcal,
+        }
+        self.user_data_ref.document().set(data)
+
+    def openMainWindow(self):
+        self.openMainWindow = MainWindow(self)
+        self.openMainWindow.show()
+        self.close()
 
 if __name__ == "__main__":
     import sys
